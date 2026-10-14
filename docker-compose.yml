@@ -1,0 +1,180 @@
+name: dataroom
+
+# Private data room. Nothing except 80/443 is reachable from the internet.
+# Grafana is bound to 127.0.0.1:3000 — use an SSH tunnel. Do not publish it.
+#
+# Versions pinned 14 Oct 2026:
+#   Nextcloud 34.0.4  — Docker Hub "production" / "stable" line (not "latest", which is 35)
+#   Audit phrases in the dashboard were checked against the 34.0.4 admin_audit source.
+#   MariaDB 10.11     — LTS
+#   Loki/Promtail 3.6.11 — last Promtail release still shipped as its own image
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [room]
+    depends_on:
+      - nextcloud
+
+  nextcloud:
+    image: nextcloud:34.0.4-apache
+    restart: unless-stopped
+    volumes:
+      - nc_html:/var/www/html
+      - ./nc-data:/var/www/html/data
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD}
+      NEXTCLOUD_ADMIN_USER: ${ADMIN_USER}
+      NEXTCLOUD_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${DOMAIN}
+      OVERWRITEHOST: ${DOMAIN}
+      OVERWRITEPROTOCOL: https
+      OVERWRITECLIURL: https://${DOMAIN}
+      # CIDR, not the name "caddy". Nextcloud ignores a hostname here,
+      # and every audit line would show the proxy instead of the visitor.
+      TRUSTED_PROXIES: 172.28.14.0/24
+      APACHE_DISABLE_REWRITE_IP: "1"
+      PHP_MEMORY_LIMIT: 512M
+      PHP_UPLOAD_LIMIT: 1G
+      APACHE_BODY_LIMIT: "0"
+      PHP_MAX_TIME: "3600"
+    networks: [room]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  cron:
+    image: nextcloud:34.0.4-apache
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    volumes:
+      - nc_html:/var/www/html
+      - ./nc-data:/var/www/html/data
+    networks: [room]
+    depends_on:
+      - nextcloud
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    command: >
+      --transaction-isolation=READ-COMMITTED
+      --log-bin=binlog
+      --binlog-format=ROW
+      --binlog-expire-logs-seconds=259200
+      --innodb-file-per-table=1
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    networks: [room]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # No maxmemory eviction. This Redis also holds file locks;
+    # allkeys-lru can drop a lock and corrupt a save.
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks: [room]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  loki:
+    image: grafana/loki:3.6.11
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks: [room]
+
+  promtail:
+    image: grafana/promtail:3.6.11
+    restart: unless-stopped
+    # root so it can read www-data's mode-640 audit.log. Not published.
+    user: "0:0"
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yml:ro
+      - ./nc-data:/logs:ro
+      - promtail_positions:/var/promtail
+    command: -config.file=/etc/promtail/config.yml
+    networks: [room]
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:12.4.13
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks: [room]
+    depends_on:
+      - loki
+
+networks:
+  room:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.14.0/24
+
+volumes:
+  nc_html:
+  db_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  loki_data:
+  grafana_data:
+  promtail_positions:
