@@ -1,0 +1,656 @@
+{
+  "uid": "dataroom",
+  "title": "Data Room \u2014 Access & Usage",
+  "description": "Built for Nextcloud 34 admin_audit. File activity is 'accessed', not 'downloaded'.",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "timezone": "utc",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "tags": [
+    "nextcloud",
+    "audit",
+    "dataroom"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "type": "query",
+        "label": "User",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "query": "label_values({job=\"nextcloud\", app=\"admin_audit\"}, user)",
+        "definition": "label_values({job=\"nextcloud\", app=\"admin_audit\"}, user)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Logins",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Successful sign-ins. Matches the audit line: Login successful.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} |= \"Login successful\" [24h]))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Failed logins",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Matches: Login failed. Two-factor failures are a separate phrase and are not included.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} |= \"Login failed\" [24h]))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "File opens",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Nextcloud 34 does not write \"File downloaded\". A view and a download are the same line: File with id \"\u2026\" accessed: \"/path\". Previews are excluded.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} | json |~ \"File with id\" |~ \"accessed:\" | regexp \"accessed: \\\"(?P<path>[^\\\"]+)\\\"\"  [24h]))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "People active",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Distinct usernames with any audit event in the last 15 minutes.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (user) (count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\", user!=\"anonymous\"}[15m])))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Shares created",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Named-user or link shares. Public links are turned off by enable-audit.sh, so this should stay internal.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} |~ \"has been shared\" [24h]))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Link opens",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Matches: The shared \u2026 has been accessed. Should stay at zero if public links are off.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} |~ \"has been accessed\" [24h]))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Logins per hour",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Login successful, bucketed by hour.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} |= \"Login successful\" [1h]))",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "logins"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineWidth": 1
+          },
+          "noValue": "0"
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "File opens per hour",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "File-accessed lines only. Not previews, not writes.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} | json |~ \"File with id\" |~ \"accessed:\" | regexp \"accessed: \\\"(?P<path>[^\\\"]+)\\\"\"  [1h]))",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "opens"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineWidth": 1
+          },
+          "noValue": "0"
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Opens by person",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Top 15 usernames by file-accessed events in the selected range, evaluated over 24h.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(15, sum by (user) (count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} | json |~ \"File with id\" |~ \"accessed:\" [24h])))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{user}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Opens by file",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Path is parsed from: accessed: \"/path\". Top 15.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(15, sum by (path) (count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} | json |~ \"File with id\" |~ \"accessed:\" | regexp \"accessed: \\\"(?P<path>[^\\\"]+)\\\"\"  [24h])))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{path}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Who opened what",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "One row per user, client IP, and path. Count is the last 24 hours.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (user, remoteAddr, path) (count_over_time({job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} | json |~ \"File with id\" |~ \"accessed:\" | regexp \"accessed: \\\"(?P<path>[^\\\"]+)\\\"\"  [24h]))",
+          "queryType": "instant",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "app": true
+            },
+            "renameByName": {
+              "user": "User",
+              "remoteAddr": "IP",
+              "path": "File",
+              "Value": "Opens"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Opens",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Audit trail",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Every admin_audit line for the user selected above. Empty user filter shows everyone.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"nextcloud\", app=\"admin_audit\", user=~\"${user:regex}\"} | json",
+          "queryType": "range",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}
